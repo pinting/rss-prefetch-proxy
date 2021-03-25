@@ -8,13 +8,12 @@ const request = require("request");
 
 dotenv.config();
 
-const config = require("./config.json");
 const { Cache } = require("./cache");
 
 const cache = new Cache(process.env.DATABASE_URL);
 
 function log(message) {
-    if (config.DEBUG) {
+    if (process.env.DEBUG == "true") {
         console.log(message);
     }
 }
@@ -57,7 +56,7 @@ async function getContent(browser, url) {
         let reader = new Readability(dom.window.document);
         let article = reader.parse();
 
-        if (config.TEXT_MODE) {
+        if (process.env.TEXT_MODE == "true") {
             return processText(article.textContent);
         }
         else {
@@ -129,7 +128,7 @@ async function processFeed(xmlString) {
     
             // Add new content node
             const contentNode = document.createElement("content:encoded");
-            const dataNode = document.createCDATASection(config.STYLE + content);
+            const dataNode = document.createCDATASection(process.env.STYLE + content);
     
             contentNode.appendChild(dataNode);
             articleNode.appendChild(contentNode);
@@ -164,13 +163,13 @@ async function requestListener(req, res) {
     catch(e) {
         log(e.message);
         res.writeHead(503);
-        res.end(config.DEBUG ? e.message : "");
+        res.end(process.env.DEBUG == "true" ? e.message : "");
     }
 }
 
 async function cleanUp() {
     const now = Math.floor(+new Date() / 1000);
-    const cleanBefore = now - config.KEEP_CACHE;
+    const cleanBefore = now - parseInt(process.env.KEEP_CACHE);
 
     await cache.clean(cleanBefore);
 
@@ -182,8 +181,8 @@ async function main() {
 
     const server = http.createServer(requestListener);
     
-    server.listen(process.env.PORT);
-    setInterval(() => cleanUp(), parseFloat(config.CLEAN_CACHE_INTERVAL) * 1000);
+    server.listen(parseInt(process.env.PORT));
+    setInterval(() => cleanUp(), parseInt(process.env.CLEAN_CACHE_INTERVAL) * 1000);
     log(`Application is listening on port ${process.env.PORT}`);
 }
 
