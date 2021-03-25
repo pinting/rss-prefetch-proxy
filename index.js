@@ -1,7 +1,6 @@
 const { DOMParser, XMLSerializer } = require("xmldom");
 const { JSDOM } = require("jsdom");
 const { Readability } = require("@mozilla/readability");
-const sqlite3 = require("sqlite3");
 const puppeteer = require("puppeteer");
 const http = require("http");
 const dotenv = require("dotenv");
@@ -10,6 +9,14 @@ const request = require("request");
 dotenv.config();
 
 const config = require("./config.json");
+const { Cache } = require("./cache");
+
+const cache = new Cache(
+    process.env.USER, 
+    process.env.HOST, 
+    process.env.DATABASE, 
+    process.env.PASSWORD, 
+    process.env.PORT);
 
 function log(message) {
     if (config.DEBUG) {
@@ -27,78 +34,6 @@ function fetch(url) {
                 resolve(body);
             }
         });
-    });
-};
-
-function databaseInit() {
-    const db = new sqlite3.Database(config.DB_PATH);
-    const query = "CREATE TABLE IF NOT EXISTS pages (" + 
-        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " + 
-        "created_at INTEGER DEFAULT CURRENT_TIMESTAMP, " + 
-        "url TEXT UNIQUE, " + 
-        "body TEXT)";
-    
-    return new Promise((resolve, reject) => {
-        db.run(query, error => {
-            if (error) {
-                reject(error);
-            }
-            else {
-                resolve(db);
-            }
-        });
-    });
-}
-
-function databaseDeletePages(db, before) {
-    const query = "DELETE FROM pages WHERE created_at < ?";
-    const isoString = new Date(before * 1000).toISOString();
-
-    return new Promise((resolve, reject) => {
-        db.get(query, [isoString], (error) => {
-            if (error) {
-                reject(error);
-            }
-            else {
-                resolve();
-            }
-        });
-    });
-}
-
-function databaseGetPage(db, url) {
-    const query = "SELECT body FROM pages WHERE url = ?";
-
-    return new Promise((resolve, reject) => {
-        db.get(query, [url], (error, row) => {
-            if (error) {
-                reject(error);
-            }
-            else {
-                resolve(row && row.body);
-            }
-        });
-    });
-}
-
-function databaseInsertPage(db, url, body) {
-    const query = "INSERT INTO pages(url, body) VALUES(?, ?)";
-
-    return new Promise((resolve, reject) => {
-        db.get(query, [url, body], (error) => {
-            if (error) {
-                reject(error);
-            }
-            else {
-                resolve();
-            }
-        });
-    });
-}
-
-function databaseClose(db) {
-    return new Promise(resolve => {
-        db.close(() => resolve());
     });
 }
 
@@ -122,9 +57,9 @@ async function getContent(browser, url) {
         return await page.content();
     }
 
-    function extract(page) {
-        var doc = new JSDOM(page, { url: url });
-        let reader = new Readability(doc.window.document);
+    function extract(htmlString) {
+        var dom = new JSDOM(htmlString, { url: url });
+        let reader = new Readability(dom.window.document);
         let article = reader.parse();
 
         if (config.TEXT_MODE) {
@@ -135,8 +70,7 @@ async function getContent(browser, url) {
         }
     }
 
-    const db = await databaseInit();
-    const cached = await databaseGetPage(db, url);
+    const cached = await cache.find(url);
 
     let result = null;
 
@@ -146,7 +80,7 @@ async function getContent(browser, url) {
         const page = await browserFetch(url);
         const content = extract(page);
 
-        await databaseInsertPage(db, url, content);
+        await cache.insert(url, content);
 
         result = content;
     }
@@ -155,8 +89,6 @@ async function getContent(browser, url) {
 
         result = cached;
     }
-    
-    await databaseClose(db);
 
     return result;
 }
@@ -245,21 +177,18 @@ async function cleanUp() {
     const now = Math.floor(+new Date() / 1000);
     const cleanBefore = now - config.KEEP_CACHE;
 
-    const db = await databaseInit();
-
-    await databaseDeletePages(db, cleanBefore);
-    await databaseClose(db);
+    await cache.clean(cleanBefore);
 
     log(`Cleaning pages before ${cleanBefore} complete`);
 }
 
 async function main() {
+    await cache.init();
+    
     const server = http.createServer(requestListener);
     
     server.listen(config.PORT);
-
     setInterval(() => cleanUp(), parseFloat(config.CLEAN_CACHE_INTERVAL) * 1000);
-    
     log(`Application is listening on port ${config.PORT}`);
 }
 
