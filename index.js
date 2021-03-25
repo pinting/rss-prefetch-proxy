@@ -31,7 +31,7 @@ function fetch(url) {
     });
 }
 
-async function getContent(browser, url) {
+async function getContent(page, url) {
     function processText(text) {
         return text
             .replace(/\n/gi, "<br />")
@@ -44,8 +44,6 @@ async function getContent(browser, url) {
     }
 
     async function browserFetch(url) {
-        const page = await browser.newPage();
-
         await page.goto(url);
         
         return await page.content();
@@ -97,6 +95,7 @@ async function processFeed(xmlString) {
     const document = parser.parseFromString(xmlString);
     const titleNodes = document.getElementsByTagName("title");
     const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+    const page = await browser.newPage();
 
     let successCount = 0;
     
@@ -115,7 +114,7 @@ async function processFeed(xmlString) {
         const url = linkNode.firstChild.nodeValue;
 
         try {
-            const content = await getContent(browser, url);
+            const content = await getContent(page, url);
     
             // Remove existing content nodes
             const contentNodes = articleNode.getElementsByTagName("content:encoded");
