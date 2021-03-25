@@ -96,7 +96,7 @@ async function processFeed(xmlString) {
 
     const document = parser.parseFromString(xmlString);
     const titleNodes = document.getElementsByTagName("title");
-    const browser = await puppeteer.launch();
+    const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
 
     let successCount = 0;
     
