@@ -1,0 +1,9 @@
+{
+    "DB_PATH": "database.db",
+    "KEEP_CACHE": 259200,
+    "CLEAN_CACHE_INTERVAL": 3600,
+    "PORT": 8080,
+    "TEXT_MODE": false,
+    "DEBUG": true,
+    "STYLE": "<style>svg, img { width: 20%; }</style>"
+}

@@ -4,12 +4,20 @@ const { Readability } = require("@mozilla/readability");
 const sqlite3 = require("sqlite3");
 const puppeteer = require("puppeteer");
 const http = require("http");
+const dotenv = require("dotenv");
 const request = require("request");
 
-const DB_PATH = "./database.db";
-const TEXT_MODE = false;
+dotenv.config();
 
-function fetchFile(url) {
+const config = require("./config.json");
+
+function log(message) {
+    if (config.DEBUG) {
+        console.log(message);
+    }
+}
+
+function fetch(url) {
     return new Promise((resolve, reject) => {
         request({ uri: url }, (error, response, body) => {
             if (error) {
@@ -23,13 +31,15 @@ function fetchFile(url) {
 };
 
 function databaseInit() {
-    const db = new sqlite3.Database(DB_PATH);
-
-    const SQL = "CREATE TABLE IF NOT EXISTS pages" + 
-        "(id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, url TEXT, content TEXT)";
+    const db = new sqlite3.Database(config.DB_PATH);
+    const query = "CREATE TABLE IF NOT EXISTS pages (" + 
+        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " + 
+        "created_at INTEGER DEFAULT CURRENT_TIMESTAMP, " + 
+        "url TEXT UNIQUE, " + 
+        "body TEXT)";
     
     return new Promise((resolve, reject) => {
-        db.run(SQL, error => {
+        db.run(query, error => {
             if (error) {
                 reject(error);
             }
@@ -40,26 +50,42 @@ function databaseInit() {
     });
 }
 
-function databaseGetPage(db, url) {
-    const SQL = "SELECT content FROM pages WHERE url = ?";
+function databaseDeletePages(db, before) {
+    const query = "DELETE FROM pages WHERE created_at < ?";
+    const isoString = new Date(before * 1000).toISOString();
 
     return new Promise((resolve, reject) => {
-        db.get(SQL, [url], (error, row) => {
+        db.get(query, [isoString], (error) => {
             if (error) {
                 reject(error);
             }
             else {
-                resolve(row && row.content);
+                resolve();
             }
         });
     });
 }
 
-function databaseInsertPage(db, url, content) {
-    const SQL = "INSERT INTO pages(url, content) VALUES(?, ?)";
+function databaseGetPage(db, url) {
+    const query = "SELECT body FROM pages WHERE url = ?";
 
     return new Promise((resolve, reject) => {
-        db.get(SQL, [url, content], (error) => {
+        db.get(query, [url], (error, row) => {
+            if (error) {
+                reject(error);
+            }
+            else {
+                resolve(row && row.body);
+            }
+        });
+    });
+}
+
+function databaseInsertPage(db, url, body) {
+    const query = "INSERT INTO pages(url, body) VALUES(?, ?)";
+
+    return new Promise((resolve, reject) => {
+        db.get(query, [url, body], (error) => {
             if (error) {
                 reject(error);
             }
@@ -77,8 +103,9 @@ function databaseClose(db) {
 }
 
 async function getContent(browser, url) {
-    function charFix(text) {
+    function processText(text) {
         return text
+            .replace(/\n/gi, "<br />")
             .replace(/\./gi, ". ")
             .replace(/\?/gi, "? ")
             .replace(/\:/gi, ": ")
@@ -87,7 +114,7 @@ async function getContent(browser, url) {
             .replace(/  /gi, " ");
     }
 
-    async function fetch() {
+    async function browserFetch(url) {
         const page = await browser.newPage();
 
         await page.goto(url);
@@ -100,8 +127,8 @@ async function getContent(browser, url) {
         let reader = new Readability(doc.window.document);
         let article = reader.parse();
 
-        if (TEXT_MODE) {
-            return charFix(article.textContent);
+        if (config.TEXT_MODE) {
+            return processText(article.textContent);
         }
         else {
             return article.content;
@@ -114,7 +141,9 @@ async function getContent(browser, url) {
     let result = null;
 
     if (!cached) {
-        const page = await fetch();
+        log(`From web: ${url}`);
+
+        const page = await browserFetch(url);
         const content = extract(page);
 
         await databaseInsertPage(db, url, content);
@@ -122,6 +151,8 @@ async function getContent(browser, url) {
         result = content;
     }
     else {
+        log(`From cache: ${url}`);
+
         result = cached;
     }
     
@@ -140,6 +171,8 @@ async function processFeed(xmlString) {
     const document = parser.parseFromString(xmlString);
     const titleNodes = document.getElementsByTagName("title");
     const browser = await puppeteer.launch();
+
+    let successCount = 0;
     
     for (let i = 0; i < titleNodes.length; i++) {
         const titleNode = titleNodes.item(i);
@@ -154,45 +187,80 @@ async function processFeed(xmlString) {
         // Extract URL and fetch content
         const linkNode = linkNodes.item(0);
         const url = linkNode.firstChild.nodeValue;
-        const content = await getContent(browser, url);
 
-        // Remove existing content nodes
-        const contentNodes = articleNode.getElementsByTagName("content:encoded");
+        try {
+            const content = await getContent(browser, url);
+    
+            // Remove existing content nodes
+            const contentNodes = articleNode.getElementsByTagName("content:encoded");
+    
+            for (let n = 0; n < contentNodes.length; n++) {
+                const contentNode = contentNodes.item(n);
+    
+                contentNode.parentNode.removeChild(contentNode);
+            }
+    
+            // Add new content node
+            const contentNode = document.createElement("content:encoded");
+            const dataNode = document.createCDATASection(config.STYLE + content);
+    
+            contentNode.appendChild(dataNode);
+            articleNode.appendChild(contentNode);
 
-        for (let n = 0; n < contentNodes.length; n++) {
-            const contentNode = contentNodes.item(n);
-
-            contentNode.parentNode.removeChild(contentNode);
+            successCount++;
+        } catch(e) {
+            log(e.message);
         }
-
-        // Add new content node
-        const contentNode = document.createElement("content:encoded");
-        const dataNode = document.createCDATASection(content);
-
-        contentNode.appendChild(dataNode);
-        articleNode.appendChild(contentNode);
     }
     
     await browser.close();
 
+    if (!successCount) {
+        throw new Error("Zero success count");
+    }
+
     return serializer.serializeToString(document);
 }
 
-const requestListener = async function (req, res) {
+async function requestListener(req, res) {
     try {
         const inputUrl = req.url.substr(1);
-        const inputFeed = await fetchFile(inputUrl);
+
+        log(`Incoming request for URL ${inputUrl}`);
+
+        const inputFeed = await fetch(inputUrl);
         const outputFeed = await processFeed(inputFeed);
     
         res.writeHead(200);
         res.end(outputFeed);
     }
     catch(e) {
-        res.writeHead(400);
-        res.end(e.message);
+        log(e.message);
+        res.writeHead(503);
+        res.end(config.DEBUG ? e.message : "");
     }
 }
-  
-const server = http.createServer(requestListener);
 
-server.listen(8080);
+async function cleanUp() {
+    const now = Math.floor(+new Date() / 1000);
+    const cleanBefore = now - config.KEEP_CACHE;
+
+    const db = await databaseInit();
+
+    await databaseDeletePages(db, cleanBefore);
+    await databaseClose(db);
+
+    log(`Cleaning pages before ${cleanBefore} complete`);
+}
+
+async function main() {
+    const server = http.createServer(requestListener);
+    
+    server.listen(config.PORT);
+
+    setInterval(() => cleanUp(), parseFloat(config.CLEAN_CACHE_INTERVAL) * 1000);
+    
+    log(`Application is listening on port ${config.PORT}`);
+}
+
+main();
