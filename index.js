@@ -11,12 +11,7 @@ dotenv.config();
 const config = require("./config.json");
 const { Cache } = require("./cache");
 
-const cache = new Cache(
-    process.env.USER, 
-    process.env.HOST, 
-    process.env.DATABASE, 
-    process.env.PASSWORD, 
-    process.env.PORT);
+const cache = new Cache(process.env.DATABASE_URL);
 
 function log(message) {
     if (config.DEBUG) {
@@ -184,7 +179,7 @@ async function cleanUp() {
 
 async function main() {
     await cache.init();
-    
+
     const server = http.createServer(requestListener);
     
     server.listen(config.PORT);

@@ -1,14 +1,8 @@
 const { Pool } = require("pg");
 
 class Cache {
-    constructor(user, host, database, password, port) {
-        this.pool = new Pool({
-            user: user,
-            host: host,
-            database: database,
-            password: password,
-            port: port
-        });
+    constructor(connectionString) {
+        this.pool = new Pool({ connectionString });
     }
 
     async init() {
