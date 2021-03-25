@@ -2,7 +2,12 @@ const { Pool } = require("pg");
 
 class Cache {
     constructor(connectionString) {
-        this.pool = new Pool({ connectionString });
+        this.pool = new Pool({ 
+            connectionString: connectionString,
+            ssl: {
+              rejectUnauthorized: false
+            }
+        });
     }
 
     async init() {
