@@ -182,9 +182,9 @@ async function main() {
 
     const server = http.createServer(requestListener);
     
-    server.listen(config.PORT);
+    server.listen(process.env.PORT);
     setInterval(() => cleanUp(), parseFloat(config.CLEAN_CACHE_INTERVAL) * 1000);
-    log(`Application is listening on port ${config.PORT}`);
+    log(`Application is listening on port ${process.env.PORT}`);
 }
 
 main();

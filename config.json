@@ -1,7 +1,6 @@
 {
     "KEEP_CACHE": 259200,
     "CLEAN_CACHE_INTERVAL": 3600,
-    "PORT": 80,
     "TEXT_MODE": false,
     "DEBUG": false,
     "STYLE": "<style>svg, img { width: 33%; }</style>"
