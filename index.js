@@ -1,7 +1,6 @@
 const { DOMParser, XMLSerializer } = require("xmldom");
 const { JSDOM } = require("jsdom");
 const { Readability } = require("@mozilla/readability");
-const puppeteer = require("puppeteer");
 const http = require("http");
 const dotenv = require("dotenv");
 const request = require("request");
@@ -10,7 +9,7 @@ dotenv.config();
 
 const { Cache } = require("./cache");
 
-const cache = new Cache(process.env.DATABASE_URL);
+const cache = new Cache(process.env.DATABASE_URL, process.env.IS_LOCAL == "true");
 
 function log(message) {
     if (process.env.DEBUG == "true") {
@@ -19,8 +18,14 @@ function log(message) {
 }
 
 function fetch(url) {
+    const headers = JSON.parse(process.env.HEADERS);
+    const options = {
+        url: url,
+        headers: headers
+    };
+
     return new Promise((resolve, reject) => {
-        request({ uri: url }, (error, response, body) => {
+        request(options, (error, response, body) => {
             if (error) {
                 reject(error);
             }
@@ -31,7 +36,7 @@ function fetch(url) {
     });
 }
 
-async function getContent(page, url) {
+async function getContent(url) {
     function processText(text) {
         return text
             .replace(/\n/gi, "<br />")
@@ -41,12 +46,6 @@ async function getContent(page, url) {
             .replace(/\!/gi, "! ")
             .replace(/\-/gi, " - ")
             .replace(/  /gi, " ");
-    }
-
-    async function browserFetch(url) {
-        await page.goto(url);
-        
-        return await page.content();
     }
 
     function extract(htmlString) {
@@ -69,7 +68,7 @@ async function getContent(page, url) {
     if (!cached) {
         log(`From web: ${url}`);
 
-        const page = await browserFetch(url);
+        const page = await fetch(url);
         const content = extract(page);
 
         await cache.insert(url, content);
@@ -93,19 +92,17 @@ async function processFeed(xmlString) {
     }});
 
     const document = parser.parseFromString(xmlString);
-    const titleNodes = document.getElementsByTagName("title");
-    const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
-    const page = await browser.newPage();
+    const itemNodes = document.getElementsByTagName("item");
 
     let successCount = 0;
     
-    for (let i = 0; i < titleNodes.length; i++) {
-        const titleNode = titleNodes.item(i);
-        const articleNode = titleNode.parentNode;
-        const linkNodes = articleNode.getElementsByTagName("link");
+    for (let i = 0; i < itemNodes.length; i++) {
+        const itemNode = itemNodes.item(i);
+        const linkNodes = itemNode.getElementsByTagName("link");
+        const titleNodes = itemNode.getElementsByTagName("title");
         
         // Check if the right node is selected
-        if (linkNodes.length != 1) {
+        if (linkNodes.length != 1 || titleNodes.length != 1) {
             continue;
         }
     
@@ -114,10 +111,10 @@ async function processFeed(xmlString) {
         const url = linkNode.firstChild.nodeValue;
 
         try {
-            const content = await getContent(page, url);
+            const content = await getContent(url);
     
             // Remove existing content nodes
-            const contentNodes = articleNode.getElementsByTagName("content:encoded");
+            const contentNodes = itemNode.getElementsByTagName("content:encoded");
     
             for (let n = 0; n < contentNodes.length; n++) {
                 const contentNode = contentNodes.item(n);
@@ -130,15 +127,13 @@ async function processFeed(xmlString) {
             const dataNode = document.createCDATASection(process.env.STYLE + content);
     
             contentNode.appendChild(dataNode);
-            articleNode.appendChild(contentNode);
+            itemNode.appendChild(contentNode);
 
             successCount++;
         } catch(e) {
             log(e.message);
         }
     }
-    
-    await browser.close();
 
     if (!successCount) {
         throw new Error("Zero success count");
@@ -167,12 +162,12 @@ async function requestListener(req, res) {
 }
 
 async function cleanUp() {
-    const now = Math.floor(+new Date() / 1000);
-    const cleanBefore = now - parseInt(process.env.KEEP_CACHE);
+    const now = +new Date();
+    const keepCache = parseInt(process.env.KEEP_CACHE) * 1000;
+    const before = new Date(now - keepCache).toISOString();
+    const count = await cache.clean(before);
 
-    await cache.clean(cleanBefore);
-
-    log(`Cleaning pages before ${cleanBefore} complete`);
+    log(`Removed ${count} pages before ${before}`);
 }
 
 async function main() {
@@ -181,7 +176,10 @@ async function main() {
     const server = http.createServer(requestListener);
     
     server.listen(parseInt(process.env.PORT));
+
+    cleanUp();
     setInterval(() => cleanUp(), parseInt(process.env.CLEAN_CACHE_INTERVAL) * 1000);
+
     log(`Application is listening on port ${process.env.PORT}`);
 }
 

@@ -1,19 +1,17 @@
 const { Pool } = require("pg");
 
 class Cache {
-    constructor(connectionString) {
+    constructor(connectionString, isLocal) {
         this.pool = new Pool({ 
             connectionString: connectionString,
-            ssl: {
-              rejectUnauthorized: false
-            }
+            ssl: isLocal ? false : { rejectUnauthorized: false }
         });
     }
 
     async init() {
         const query = "CREATE TABLE IF NOT EXISTS cache (" + 
             "id SERIAL PRIMARY KEY, " + 
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " + 
+            "created_at TIMESTAMP WITHOUT TIME ZONE, " + 
             "url TEXT UNIQUE, " + 
             "body TEXT)";
         
@@ -23,14 +21,19 @@ class Cache {
     async clean(before) {
         const client = await this.pool.connect();
         const query = "DELETE FROM cache WHERE created_at < $1";
-        const isoString = new Date(before * 1000).toISOString();
+        
+        let count = 0;
 
         try {
-            await client.query(query, [isoString]);
+            const r = await client.query(query, [before]);
+
+            count = r.rowCount;
         }
         finally {
             client.release()
         }
+
+        return count;
     }
 
     async find(url) {
@@ -53,10 +56,11 @@ class Cache {
 
     async insert(url, body) {
         const client = await this.pool.connect();
-        const query = "INSERT INTO cache(url, body) VALUES($1, $2)";
+        const query = "INSERT INTO cache(created_at, url, body) VALUES($1, $2, $3)";
+        const now = new Date().toISOString();
         
         try {
-            await client.query(query, [url, body]);
+            await client.query(query, [now, url, body]);
         }
         finally {
             client.release()
