@@ -6,10 +6,6 @@ This proxy fills the `content:encoded` field of an RSS feed with the actual cont
 
 Powered by Readability.js from Mozilla.
 
-## TODOs
-
-- Expiring cache, so news updates go through the proxy
-
 ## License
 
 Copyright (c) 2021 Tornyi Dénes. Licensed under the MIT license.
