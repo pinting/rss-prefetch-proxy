@@ -1,26 +1,34 @@
-const { Pool } = require("pg");
+import { Pool } from "pg";
 
-class Cache {
-    constructor(connectionString, isLocal) {
+export class FeedCache {
+    private pool: Pool;
+    private isLocal: boolean;
+
+    constructor(connectionString: string, isLocal: boolean) {
+        this.isLocal = isLocal;
         this.pool = new Pool({ 
             connectionString: connectionString,
             ssl: isLocal ? false : { rejectUnauthorized: false }
         });
     }
 
-    async init() {
-        const query = "CREATE TABLE IF NOT EXISTS cache (" + 
+    public async init(): Promise<void> {
+        let query = "CREATE TABLE IF NOT EXISTS feed_cache (" + 
             "id SERIAL PRIMARY KEY, " + 
             "created_at TIMESTAMP WITHOUT TIME ZONE, " + 
             "url TEXT UNIQUE, " + 
-            "body TEXT)";
+            "body TEXT);";
+        
+        if (this.isLocal) {
+            query = "DROP TABLE IF EXISTS feed_cache;" + query;
+        }
         
         await this.pool.query(query);
     }
 
-    async clean(before) {
+    public async clean(before: string): Promise<number> {
         const client = await this.pool.connect();
-        const query = "DELETE FROM cache WHERE created_at < $1";
+        const query = "DELETE FROM feed_cache WHERE created_at < $1;";
         
         let count = 0;
 
@@ -36,9 +44,9 @@ class Cache {
         return count;
     }
 
-    async find(url) {
+    public async find(url: string): Promise<string> {
         const client = await this.pool.connect();
-        const query = "SELECT body FROM cache WHERE url = $1";
+        const query = "SELECT body FROM feed_cache WHERE url = $1;";
 
         let result = null;
 
@@ -54,9 +62,9 @@ class Cache {
         return result;
     }
 
-    async insert(url, body) {
+    public async insert(url: string, body: string): Promise<void> {
         const client = await this.pool.connect();
-        const query = "INSERT INTO cache(created_at, url, body) VALUES($1, $2, $3)";
+        const query = "INSERT INTO feed_cache(created_at, url, body) VALUES($1, $2, $3);";
         const now = new Date().toISOString();
         
         try {
@@ -67,5 +75,3 @@ class Cache {
         }
     }
 }
-
-module.exports = { Cache: Cache };

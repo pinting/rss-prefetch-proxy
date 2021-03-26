@@ -1,8 +1,8 @@
 {
   "name": "rss-prefetch-proxy",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Fill the content:encoded field of an RSS feed with the actual content",
-  "main": "index.js",
+  "main": "./dist/index.js",
   "dependencies": {
     "@mozilla/readability": "^0.4.1",
     "dotenv": "^8.2.0",
@@ -11,9 +11,17 @@
     "request": "^2.88.2",
     "xmldom": "^0.5.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@types/jsdom": "^16.2.7",
+    "@types/node": "^14.14.36",
+    "@types/pg": "^7.14.11",
+    "@types/request": "^2.48.5",
+    "@types/xmldom": "^0.1.30",
+    "typescript": "^4.2.3"
+  },
   "scripts": {
-    "start": "node index"
+    "start": "node ./dist/index",
+    "build": "tsc"
   },
   "engines": {
     "node": "~12.14.1",
