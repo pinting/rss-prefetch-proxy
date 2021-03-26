@@ -5,6 +5,7 @@ import { log, fetch, validateUrl } from "./Common";
 import { FeedCache } from "./FeedCache";
 import { FeedProcessor } from "./FeedProcessor"
 
+const tweaks = require('../tweaks.json') || {};
 const cache = new FeedCache(process.env.DATABASE_URL, process.env.IS_LOCAL == "true");
 
 async function clean() {
@@ -25,7 +26,7 @@ async function requestListener(req: IncomingMessage, res: ServerResponse): Promi
     
     if (validateUrl(inputUrl)) {
         try {
-            const processor = new FeedProcessor(cache, textMode, style);
+            const processor = new FeedProcessor(cache, textMode, style, tweaks);
     
             log(`Incoming request for URL ${inputUrl}`);
     

@@ -42,16 +42,46 @@ var readability_1 = require("@mozilla/readability");
 var jsdom_1 = require("jsdom");
 var Common_1 = require("./Common");
 var FeedProcessor = /** @class */ (function () {
-    function FeedProcessor(cache, textMode, style) {
+    function FeedProcessor(cache, textMode, style, tweaks) {
         if (textMode === void 0) { textMode = false; }
         if (style === void 0) { style = ""; }
         this.cache = cache;
         this.textMode = textMode;
         this.style = style;
+        this.tweaks = tweaks;
     }
+    FeedProcessor.prototype.matchDomain = function (url) {
+        console.log('a123sd');
+        var keys = Object.keys(this.tweaks);
+        var values = Object.values(this.tweaks);
+        for (var i = 0; i < keys.length; i++) {
+            var regex = new RegExp("^(?:https?://)?(?:[^.]+.)?" + keys[i] + "(/.*)?$");
+            if (regex.test(url)) {
+                console.log('asd');
+                return values[i];
+            }
+        }
+        return {};
+    };
+    FeedProcessor.prototype.removeSleim = function (dom, url) {
+        console.log('dsd');
+        var document = dom.window.document;
+        var tweak = this.matchDomain(url);
+        if (tweak.hasOwnProperty('classes')) {
+            var classes = tweak['classes'];
+            for (var i = 0; i < classes.length; i++) {
+                document.querySelectorAll("." + classes[i]).forEach(function (a) {
+                    console.log("hit");
+                    a.remove();
+                });
+            }
+        }
+        return document;
+    };
     FeedProcessor.prototype.extractContent = function (url, htmlString) {
         var dom = new jsdom_1.JSDOM(htmlString, { url: url });
-        var reader = new readability_1.Readability(dom.window.document);
+        var doc = this.removeSleim(dom, url);
+        var reader = new readability_1.Readability(doc);
         var article = reader.parse();
         if (this.textMode) {
             return Common_1.processText(article.textContent);
@@ -96,10 +126,16 @@ var FeedProcessor = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         serializer = new xmldom_1.XMLSerializer();
-                        parser = new xmldom_1.DOMParser({ errorHandler: {
-                                error: function (message) { throw new Error(message); },
-                                fatalError: function (message) { throw new Error(message); }
-                            } });
+                        parser = new xmldom_1.DOMParser({
+                            errorHandler: {
+                                error: function (message) {
+                                    throw new Error(message);
+                                },
+                                fatalError: function (message) {
+                                    throw new Error(message);
+                                }
+                            }
+                        });
                         document = parser.parseFromString(xmlString);
                         itemNodes = document.getElementsByTagName("item");
                         successCount = 0;

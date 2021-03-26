@@ -41,6 +41,7 @@ var http_1 = require("http");
 var Common_1 = require("./Common");
 var FeedCache_1 = require("./FeedCache");
 var FeedProcessor_1 = require("./FeedProcessor");
+var tweaks = require('../tweaks.json') || {};
 var cache = new FeedCache_1.FeedCache(process.env.DATABASE_URL, process.env.IS_LOCAL == "true");
 function clean() {
     return __awaiter(this, void 0, void 0, function () {
@@ -74,7 +75,7 @@ function requestListener(req, res) {
                     _a.label = 1;
                 case 1:
                     _a.trys.push([1, 4, , 5]);
-                    processor = new FeedProcessor_1.FeedProcessor(cache, textMode, style);
+                    processor = new FeedProcessor_1.FeedProcessor(cache, textMode, style, tweaks);
                     Common_1.log("Incoming request for URL " + inputUrl);
                     return [4 /*yield*/, Common_1.fetch(inputUrl)];
                 case 2:
