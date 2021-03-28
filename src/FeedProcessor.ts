@@ -160,7 +160,6 @@ export class FeedProcessor {
                 catch (e) {
                     log(e.message);
                 }
-
                 outputChannelNode.appendChild(outputItemNode);
             }
 
