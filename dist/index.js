@@ -41,8 +41,9 @@ var http_1 = require("http");
 var Common_1 = require("./Common");
 var FeedCache_1 = require("./FeedCache");
 var FeedProcessor_1 = require("./FeedProcessor");
-var tweaks = require('../tweaks.json') || {};
+;
 var cache = new FeedCache_1.FeedCache(process.env.DATABASE_URL, process.env.IS_LOCAL == "true");
+var ads = require('../ads.json') || {};
 function clean() {
     return __awaiter(this, void 0, void 0, function () {
         var now, keepCache, before, count;
@@ -61,45 +62,73 @@ function clean() {
         });
     });
 }
+function removeAds(document, url) {
+    var key = Object.keys(ads).find(function (domain) { return url.includes(domain); });
+    if (ads.hasOwnProperty(key)) {
+        var classNames = ads[key] || [];
+        for (var _i = 0, classNames_1 = classNames; _i < classNames_1.length; _i++) {
+            var className = classNames_1[_i];
+            document.querySelectorAll(className).forEach(function (e) { return e.remove(); });
+        }
+    }
+}
 function requestListener(req, res) {
     return __awaiter(this, void 0, void 0, function () {
-        var debug, textMode, style, inputUrl, processor, inputFeed, outputFeed, e_1;
+        var responseHeaders, debug, textMode, style, inputUrl, processor, inputFeed, outputFeed, e_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
+                    responseHeaders = {
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "OPTIONS, GET",
+                        "Access-Control-Max-Age": 2592000
+                    };
+                    if (req.method == "OPTIONS") {
+                        res.writeHead(204, responseHeaders);
+                        res.end();
+                        return [2 /*return*/];
+                    }
+                    if (req.method != "GET") {
+                        res.writeHead(400, responseHeaders);
+                        res.end();
+                        return [2 /*return*/];
+                    }
                     debug = process.env.DEBUG == "true";
                     textMode = process.env.TEXT_MODE == "true";
                     style = process.env.STYLE;
                     inputUrl = req.url && req.url.substr(1);
-                    if (!Common_1.validateUrl(inputUrl)) return [3 /*break*/, 6];
+                    if (!Common_1.validateUrl(inputUrl)) {
+                        res.writeHead(400, responseHeaders);
+                        res.end();
+                        return [2 /*return*/];
+                    }
+                    Common_1.log("Incoming request for URL " + inputUrl);
                     _a.label = 1;
                 case 1:
                     _a.trys.push([1, 4, , 5]);
-                    processor = new FeedProcessor_1.FeedProcessor(cache, textMode, style, tweaks);
-                    Common_1.log("Incoming request for URL " + inputUrl);
+                    processor = new FeedProcessor_1.FeedProcessor(cache, {
+                        textMode: textMode,
+                        style: style,
+                        applyTweaks: removeAds
+                    });
                     return [4 /*yield*/, Common_1.fetch(inputUrl)];
                 case 2:
                     inputFeed = _a.sent();
                     return [4 /*yield*/, processor.process(inputFeed)];
                 case 3:
                     outputFeed = _a.sent();
-                    res.writeHead(200);
+                    res.writeHead(200, responseHeaders);
                     res.end(outputFeed);
                     return [3 /*break*/, 5];
                 case 4:
                     e_1 = _a.sent();
                     Common_1.log(e_1.message);
-                    res.writeHead(503);
-                    res.end(debug ? e_1.message : "");
+                    res.writeHead(503, responseHeaders);
+                    res.end(debug ? e_1.message : undefined);
                     return [3 /*break*/, 5];
                 case 5:
                     clean();
-                    return [3 /*break*/, 7];
-                case 6:
-                    res.writeHead(400);
-                    res.end("");
-                    _a.label = 7;
-                case 7: return [2 /*return*/];
+                    return [2 /*return*/];
             }
         });
     });

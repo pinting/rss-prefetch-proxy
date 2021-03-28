@@ -1,0 +1,12 @@
+{
+    "://telex.hu": [
+        ".hint--zacc"
+    ],
+    "://index.hu": [
+        ".cikk-vegi-ajanlo-reklamok-container"
+    ],
+    "://hang.hu": [
+        ".tamogatas-box-outer",
+        ".et_pb_title_meta_container"
+    ]
+}

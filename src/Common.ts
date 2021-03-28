@@ -37,5 +37,30 @@ export function processText(text: string): string {
 }
 
 export function validateUrl(url: string): boolean {
-    return /^(ftp|http|https):\/\/[^ "]+$/.test(url);
+    return url && /^(ftp|http|https):\/\/[^ "]+$/.test(url);
+}
+
+export function noop(...args: any[]): any
+{
+    return true;
+}
+
+export function getFirstElement(parent: Element | Document, tagName: string): Element {
+    const nodes = parent.getElementsByTagName(tagName);
+
+    if (nodes.length) {
+        return nodes.item(0);
+    }
+
+    return null;
+}
+
+export function copyElements(fromParent: Element, toParent: Element, tagNames: string[]): void {
+    for (let tagName of tagNames) {
+        const element = this.getFirstElement(fromParent, tagName);
+
+        if (element) {
+            toParent.appendChild(element);
+        }
+    }
 }
