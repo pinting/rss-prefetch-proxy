@@ -37,5 +37,5 @@ export function processText(text: string): string {
 }
 
 export function validateUrl(url: string): boolean {
-    return /^(ftp|http|https):\/\/[^ "]+$/.test(url);
+    return url && /^(ftp|http|https):\/\/[^ "]+$/.test(url);
 }

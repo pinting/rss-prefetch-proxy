@@ -41,7 +41,7 @@ function processText(text) {
 }
 exports.processText = processText;
 function validateUrl(url) {
-    return /^(ftp|http|https):\/\/[^ "]+$/.test(url);
+    return url && /^(ftp|http|https):\/\/[^ "]+$/.test(url);
 }
 exports.validateUrl = validateUrl;
 //# sourceMappingURL=Common.js.map

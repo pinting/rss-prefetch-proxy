@@ -36,21 +36,42 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FeedProcessor = void 0;
+exports.FeedProcessor = exports.DEFAULT_ITEM_TAGS = exports.DEFAULT_CHANNEL_TAGS = exports.DEFAULT_ROOT_TEMPLATE = void 0;
 var xmldom_1 = require("xmldom");
 var readability_1 = require("@mozilla/readability");
 var jsdom_1 = require("jsdom");
 var Common_1 = require("./Common");
+exports.DEFAULT_ROOT_TEMPLATE = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+    "<rss xmlns:content=\"http://purl.org/rss/1.0/modules/content/\" " +
+    "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
+    "xmlns:sy=\"http://purl.org/rss/1.0/modules/syndication/\" " +
+    "xmlns:atom=\"http://www.w3.org/2005/Atom\" " +
+    "version=\"2.0\" />";
+exports.DEFAULT_CHANNEL_TAGS = [
+    "title",
+    "link",
+    "description",
+    "copyright"
+];
+exports.DEFAULT_ITEM_TAGS = [
+    "title",
+    "link",
+    "pubDate",
+    "guid",
+    "description"
+];
 var FeedProcessor = /** @class */ (function () {
-    function FeedProcessor(cache, textMode, style) {
-        if (textMode === void 0) { textMode = false; }
-        if (style === void 0) { style = ""; }
+    function FeedProcessor(cache, options) {
+        if (options === void 0) { options = {}; }
         this.cache = cache;
-        this.textMode = textMode;
-        this.style = style;
+        this.rootTemplate = options.rootTemplate || exports.DEFAULT_ROOT_TEMPLATE;
+        this.channelTags = options.channelTags || exports.DEFAULT_CHANNEL_TAGS;
+        this.itemTags = options.itemTags || exports.DEFAULT_ITEM_TAGS;
+        this.textMode = options.textMode || false;
+        this.style = options.style || "";
     }
-    FeedProcessor.prototype.extractContent = function (url, htmlString) {
-        var dom = new jsdom_1.JSDOM(htmlString, { url: url });
+    FeedProcessor.prototype.extractContent = function (url, html) {
+        var dom = new jsdom_1.JSDOM(html, { url: url });
         var reader = new readability_1.Readability(dom.window.document);
         var article = reader.parse();
         if (this.textMode) {
@@ -62,36 +83,50 @@ var FeedProcessor = /** @class */ (function () {
     };
     FeedProcessor.prototype.getContent = function (url) {
         return __awaiter(this, void 0, void 0, function () {
-            var cached, result, page, content;
+            var result, page, content;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0: return [4 /*yield*/, this.cache.find(url)];
                     case 1:
-                        cached = _a.sent();
-                        result = null;
-                        if (!!cached) return [3 /*break*/, 4];
+                        result = _a.sent();
+                        if (!result) return [3 /*break*/, 2];
+                        Common_1.log("From cache: " + url);
+                        return [3 /*break*/, 5];
+                    case 2:
                         Common_1.log("From web: " + url);
                         return [4 /*yield*/, Common_1.fetch(url)];
-                    case 2:
+                    case 3:
                         page = _a.sent();
                         content = this.extractContent(url, page);
                         return [4 /*yield*/, this.cache.insert(url, content)];
-                    case 3:
+                    case 4:
                         _a.sent();
                         result = content;
-                        return [3 /*break*/, 5];
-                    case 4:
-                        Common_1.log("From cache: " + url);
-                        result = cached;
                         _a.label = 5;
                     case 5: return [2 /*return*/, result];
                 }
             });
         });
     };
-    FeedProcessor.prototype.process = function (xmlString) {
+    FeedProcessor.prototype.getFirstElement = function (parent, tagName) {
+        var nodes = parent.getElementsByTagName(tagName);
+        if (nodes.length) {
+            return nodes.item(0);
+        }
+        return null;
+    };
+    FeedProcessor.prototype.copyElements = function (fromParent, toParent, tagNames) {
+        for (var _i = 0, tagNames_1 = tagNames; _i < tagNames_1.length; _i++) {
+            var tagName = tagNames_1[_i];
+            var element = this.getFirstElement(fromParent, tagName);
+            if (element) {
+                toParent.appendChild(element);
+            }
+        }
+    };
+    FeedProcessor.prototype.process = function (inputFeed) {
         return __awaiter(this, void 0, void 0, function () {
-            var serializer, parser, document, itemNodes, successCount, i, itemNode, linkNodes, titleNodes, linkNode, url, content, contentNodes, n, contentNode_1, contentNode, dataNode, e_1;
+            var serializer, parser, feed, root, outputFeed, outputRoot, channelNodes, i, channelNode, outputChannelNode, itemNodes, j, itemNode, outputItemNode, linkNode, url, content, contentNode, dataNode, e_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -100,51 +135,64 @@ var FeedProcessor = /** @class */ (function () {
                                 error: function (message) { throw new Error(message); },
                                 fatalError: function (message) { throw new Error(message); }
                             } });
-                        document = parser.parseFromString(xmlString);
-                        itemNodes = document.getElementsByTagName("item");
-                        successCount = 0;
+                        feed = parser.parseFromString(inputFeed);
+                        root = this.getFirstElement(feed, "rss");
+                        outputFeed = parser.parseFromString(this.rootTemplate);
+                        outputRoot = this.getFirstElement(outputFeed, "rss");
+                        channelNodes = root.getElementsByTagName("channel");
                         i = 0;
                         _a.label = 1;
                     case 1:
-                        if (!(i < itemNodes.length)) return [3 /*break*/, 6];
-                        itemNode = itemNodes.item(i);
-                        linkNodes = itemNode.getElementsByTagName("link");
-                        titleNodes = itemNode.getElementsByTagName("title");
-                        // Check if the right node is selected
-                        if (linkNodes.length != 1 || titleNodes.length != 1) {
-                            return [3 /*break*/, 5];
-                        }
-                        linkNode = linkNodes.item(0);
-                        url = linkNode.firstChild.nodeValue;
+                        if (!(i < channelNodes.length)) return [3 /*break*/, 10];
+                        channelNode = channelNodes.item(i);
+                        outputChannelNode = outputFeed.createElement("channel");
+                        // Copy channel tags
+                        this.copyElements(channelNode, outputChannelNode, this.channelTags);
+                        itemNodes = channelNode.getElementsByTagName("item");
+                        j = 0;
                         _a.label = 2;
                     case 2:
-                        _a.trys.push([2, 4, , 5]);
-                        return [4 /*yield*/, this.getContent(url)];
-                    case 3:
-                        content = _a.sent();
-                        contentNodes = itemNode.getElementsByTagName("content:encoded");
-                        for (n = 0; n < contentNodes.length; n++) {
-                            contentNode_1 = contentNodes.item(n);
-                            contentNode_1.parentNode.removeChild(contentNode_1);
+                        if (!(j < itemNodes.length)) return [3 /*break*/, 8];
+                        itemNode = itemNodes.item(j);
+                        outputItemNode = outputFeed.createElement("item");
+                        linkNode = this.getFirstElement(itemNode, "link");
+                        if (!linkNode) {
+                            return [3 /*break*/, 7];
                         }
-                        contentNode = document.createElement("content:encoded");
-                        dataNode = document.createCDATASection(this.style + content);
-                        contentNode.appendChild(dataNode);
-                        itemNode.appendChild(contentNode);
-                        successCount++;
-                        return [3 /*break*/, 5];
+                        // Copy item tags
+                        this.copyElements(itemNode, outputItemNode, this.itemTags);
+                        url = linkNode.firstChild && linkNode.firstChild.nodeValue;
+                        if (!Common_1.validateUrl(url)) {
+                            return [3 /*break*/, 7];
+                        }
+                        _a.label = 3;
+                    case 3:
+                        _a.trys.push([3, 5, , 6]);
+                        return [4 /*yield*/, this.getContent(url)];
                     case 4:
+                        content = _a.sent();
+                        contentNode = outputFeed.createElement("content:encoded");
+                        dataNode = outputFeed.createCDATASection(this.style + content);
+                        contentNode.appendChild(dataNode);
+                        outputItemNode.appendChild(contentNode);
+                        return [3 /*break*/, 6];
+                    case 5:
                         e_1 = _a.sent();
                         Common_1.log(e_1.message);
-                        return [3 /*break*/, 5];
-                    case 5:
+                        return [3 /*break*/, 6];
+                    case 6:
+                        outputChannelNode.appendChild(outputItemNode);
+                        _a.label = 7;
+                    case 7:
+                        j++;
+                        return [3 /*break*/, 2];
+                    case 8:
+                        outputRoot.appendChild(outputChannelNode);
+                        _a.label = 9;
+                    case 9:
                         i++;
                         return [3 /*break*/, 1];
-                    case 6:
-                        if (!successCount) {
-                            throw new Error("Zero success count");
-                        }
-                        return [2 /*return*/, serializer.serializeToString(document)];
+                    case 10: return [2 /*return*/, serializer.serializeToString(outputFeed)];
                 }
             });
         });
