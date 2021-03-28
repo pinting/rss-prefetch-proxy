@@ -77,11 +77,14 @@ var FeedProcessor = /** @class */ (function () {
         this.applyTweaks(document, url);
         var reader = new readability_1.Readability(document);
         var article = reader.parse();
+        var text = article.textContent;
+        var count = text.length;
         if (this.textMode) {
-            return Common_1.processText(article.textContent);
+            var processedText = Common_1.processText(text);
+            return { body: processedText, count: count };
         }
         else {
-            return article.content;
+            return { body: article.content, count: count };
         }
     };
     FeedProcessor.prototype.getContent = function (url) {
@@ -92,7 +95,7 @@ var FeedProcessor = /** @class */ (function () {
                     case 0: return [4 /*yield*/, this.cache.find(url)];
                     case 1:
                         result = _a.sent();
-                        if (!result) return [3 /*break*/, 2];
+                        if (!result.count) return [3 /*break*/, 2];
                         Common_1.log("From cache: " + url);
                         return [3 /*break*/, 5];
                     case 2:
@@ -101,7 +104,7 @@ var FeedProcessor = /** @class */ (function () {
                     case 3:
                         page = _a.sent();
                         content = this.extractContent(url, page);
-                        return [4 /*yield*/, this.cache.insert(url, content)];
+                        return [4 /*yield*/, this.cache.insert(url, content.count, content.body)];
                     case 4:
                         _a.sent();
                         result = content;
@@ -111,7 +114,8 @@ var FeedProcessor = /** @class */ (function () {
             });
         });
     };
-    FeedProcessor.prototype.process = function (inputFeed) {
+    FeedProcessor.prototype.process = function (inputFeed, minCharCount) {
+        if (minCharCount === void 0) { minCharCount = 0; }
         return __awaiter(this, void 0, void 0, function () {
             var serializer, parser, feed, root, outputFeed, outputRoot, channelNodes, i, channelNode, outputChannelNode, itemNodes, j, itemNode, outputItemNode, linkNode, url, content, contentNode, dataNode, e_1;
             return __generator(this, function (_a) {
@@ -164,8 +168,11 @@ var FeedProcessor = /** @class */ (function () {
                         return [4 /*yield*/, this.getContent(url)];
                     case 4:
                         content = _a.sent();
+                        if (content.count < minCharCount) {
+                            return [3 /*break*/, 7];
+                        }
                         contentNode = outputFeed.createElement("content:encoded");
-                        dataNode = outputFeed.createCDATASection(this.style + content);
+                        dataNode = outputFeed.createCDATASection(this.style + content.body);
                         contentNode.appendChild(dataNode);
                         outputItemNode.appendChild(contentNode);
                         return [3 /*break*/, 6];

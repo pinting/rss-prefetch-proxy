@@ -56,6 +56,7 @@ var FeedCache = /** @class */ (function () {
                             "id SERIAL PRIMARY KEY, " +
                             "created_at TIMESTAMP WITHOUT TIME ZONE, " +
                             "url TEXT UNIQUE, " +
+                            "count INT, " +
                             "body TEXT);";
                         if (this.isLocal) {
                             query = "DROP TABLE IF EXISTS feed_cache;" + query;
@@ -70,57 +71,61 @@ var FeedCache = /** @class */ (function () {
     };
     FeedCache.prototype.clean = function (before) {
         return __awaiter(this, void 0, void 0, function () {
-            var client, query, count, r;
+            var client, query, rowCount, r;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0: return [4 /*yield*/, this.pool.connect()];
                     case 1:
                         client = _a.sent();
                         query = "DELETE FROM feed_cache WHERE created_at < $1;";
-                        count = 0;
+                        rowCount = 0;
                         _a.label = 2;
                     case 2:
                         _a.trys.push([2, , 4, 5]);
                         return [4 /*yield*/, client.query(query, [before])];
                     case 3:
                         r = _a.sent();
-                        count = r.rowCount;
+                        rowCount = r.rowCount;
                         return [3 /*break*/, 5];
                     case 4:
                         client.release();
                         return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/, count];
+                    case 5: return [2 /*return*/, rowCount];
                 }
             });
         });
     };
     FeedCache.prototype.find = function (url) {
         return __awaiter(this, void 0, void 0, function () {
-            var client, query, result, r;
+            var client, query, body, count, r;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0: return [4 /*yield*/, this.pool.connect()];
                     case 1:
                         client = _a.sent();
-                        query = "SELECT body FROM feed_cache WHERE url = $1;";
-                        result = null;
+                        query = "SELECT body, count FROM feed_cache WHERE url = $1;";
+                        body = null;
+                        count = 0;
                         _a.label = 2;
                     case 2:
                         _a.trys.push([2, , 4, 5]);
                         return [4 /*yield*/, client.query(query, [url])];
                     case 3:
                         r = _a.sent();
-                        result = r && r.rows[0] && r.rows[0].body;
+                        if (r && r.rows[0]) {
+                            body = r.rows[0].body;
+                            count = r.rows[0].count;
+                        }
                         return [3 /*break*/, 5];
                     case 4:
                         client.release();
                         return [7 /*endfinally*/];
-                    case 5: return [2 /*return*/, result];
+                    case 5: return [2 /*return*/, { body: body, count: count }];
                 }
             });
         });
     };
-    FeedCache.prototype.insert = function (url, body) {
+    FeedCache.prototype.insert = function (url, count, body) {
         return __awaiter(this, void 0, void 0, function () {
             var client, query, now;
             return __generator(this, function (_a) {
@@ -128,12 +133,12 @@ var FeedCache = /** @class */ (function () {
                     case 0: return [4 /*yield*/, this.pool.connect()];
                     case 1:
                         client = _a.sent();
-                        query = "INSERT INTO feed_cache(created_at, url, body) VALUES($1, $2, $3);";
+                        query = "INSERT INTO feed_cache(created_at, url, count, body) VALUES($1, $2, $3, $4);";
                         now = new Date().toISOString();
                         _a.label = 2;
                     case 2:
                         _a.trys.push([2, , 4, 5]);
-                        return [4 /*yield*/, client.query(query, [now, url, body])];
+                        return [4 /*yield*/, client.query(query, [now, url, count, body])];
                     case 3:
                         _a.sent();
                         return [3 /*break*/, 5];

@@ -57,15 +57,29 @@ async function requestListener(req: IncomingMessage, res: ServerResponse): Promi
     const textMode = process.env.TEXT_MODE == "true";
     const style = process.env.STYLE;
 
-    const inputUrl = req.url && req.url.substr(1);
+    const input = req.url && req.url.substr(1);
+
+    let feedUrl = input;
+    let minCharCount = 0;
+
+    const parts = input.split(",");
+
+    if (parts.length >= 2) {
+        const parsedNumber = parseInt(parts[0]);
+
+        if (!Number.isNaN(parsedNumber)) {
+            feedUrl = parts[1];
+            minCharCount = parsedNumber;
+        }
+    }
     
-    if (!validateUrl(inputUrl)) {
+    if (!validateUrl(feedUrl)) {
         res.writeHead(400, responseHeaders);
         res.end();
         return;
     }
     
-    log(`Incoming request for URL ${inputUrl}`);
+    log(`Incoming request for URL ${feedUrl}`);
     
     try {
         const processor = new FeedProcessor(cache, {
@@ -74,8 +88,8 @@ async function requestListener(req: IncomingMessage, res: ServerResponse): Promi
             applyTweaks: removeAds
         });
 
-        const inputFeed = await fetch(inputUrl);
-        const outputFeed = await processor.process(inputFeed);
+        const inputFeed = await fetch(feedUrl);
+        const outputFeed = await processor.process(inputFeed, minCharCount);
     
         res.writeHead(200, responseHeaders);
         res.end(outputFeed);

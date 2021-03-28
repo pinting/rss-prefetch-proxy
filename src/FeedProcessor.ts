@@ -58,7 +58,7 @@ export class FeedProcessor {
         this.applyTweaks = options.applyTweaks || noop;
     }
 
-    private extractContent(url: string, html: string): string {
+    private extractContent(url: string, html: string): { body: string, count: number } {
         const dom = new JSDOM(html, { url: url });
         const document = dom.window.document;
 
@@ -66,19 +66,23 @@ export class FeedProcessor {
 
         const reader = new Readability(document);
         const article = reader.parse();
+        const text = article.textContent;
+        const count = text.length;
 
         if (this.textMode) {
-            return processText(article.textContent);
+            const processedText = processText(text);
+            
+            return { body: processedText, count: count };
         }
         else {
-            return article.content;
+            return { body: article.content, count: count };
         }
     }
 
-    private async getContent(url: string): Promise<string> {
+    private async getContent(url: string): Promise<{ body: string, count: number }> {
         let result = await this.cache.find(url);
 
-        if (result) {
+        if (result.count) {
             log(`From cache: ${url}`);
         }
         else {
@@ -87,7 +91,7 @@ export class FeedProcessor {
             const page = await fetch(url);
             const content = this.extractContent(url, page);
 
-            await this.cache.insert(url, content);
+            await this.cache.insert(url, content.count, content.body);
 
             result = content;
         }
@@ -95,7 +99,7 @@ export class FeedProcessor {
         return result;
     }
 
-    public async process(inputFeed: string): Promise<string> {
+    public async process(inputFeed: string, minCharCount: number = 0): Promise<string> {
         const serializer = new XMLSerializer();
         const parser = new DOMParser({
             errorHandler: {
@@ -150,9 +154,13 @@ export class FeedProcessor {
                 try {
                     const content = await this.getContent(url);
 
+                    if (content.count < minCharCount) {
+                        continue;
+                    }
+
                     // Add new content node to item
                     const contentNode = outputFeed.createElement("content:encoded");
-                    const dataNode = outputFeed.createCDATASection(this.style + content);
+                    const dataNode = outputFeed.createCDATASection(this.style + content.body);
 
                     contentNode.appendChild(dataNode);
                     outputItemNode.appendChild(contentNode);

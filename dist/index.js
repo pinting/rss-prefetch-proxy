@@ -74,7 +74,7 @@ function removeAds(document, url) {
 }
 function requestListener(req, res) {
     return __awaiter(this, void 0, void 0, function () {
-        var responseHeaders, debug, textMode, style, inputUrl, processor, inputFeed, outputFeed, e_1;
+        var responseHeaders, debug, textMode, style, input, feedUrl, minCharCount, parts, parsedNumber, processor, inputFeed, outputFeed, e_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -96,13 +96,23 @@ function requestListener(req, res) {
                     debug = process.env.DEBUG == "true";
                     textMode = process.env.TEXT_MODE == "true";
                     style = process.env.STYLE;
-                    inputUrl = req.url && req.url.substr(1);
-                    if (!Common_1.validateUrl(inputUrl)) {
+                    input = req.url && req.url.substr(1);
+                    feedUrl = input;
+                    minCharCount = 0;
+                    parts = input.split(",");
+                    if (parts.length >= 2) {
+                        parsedNumber = parseInt(parts[0]);
+                        if (!Number.isNaN(parsedNumber)) {
+                            feedUrl = parts[1];
+                            minCharCount = parsedNumber;
+                        }
+                    }
+                    if (!Common_1.validateUrl(feedUrl)) {
                         res.writeHead(400, responseHeaders);
                         res.end();
                         return [2 /*return*/];
                     }
-                    Common_1.log("Incoming request for URL " + inputUrl);
+                    Common_1.log("Incoming request for URL " + feedUrl);
                     _a.label = 1;
                 case 1:
                     _a.trys.push([1, 4, , 5]);
@@ -111,10 +121,10 @@ function requestListener(req, res) {
                         style: style,
                         applyTweaks: removeAds
                     });
-                    return [4 /*yield*/, Common_1.fetch(inputUrl)];
+                    return [4 /*yield*/, Common_1.fetch(feedUrl)];
                 case 2:
                     inputFeed = _a.sent();
-                    return [4 /*yield*/, processor.process(inputFeed)];
+                    return [4 /*yield*/, processor.process(inputFeed, minCharCount)];
                 case 3:
                     outputFeed = _a.sent();
                     res.writeHead(200, responseHeaders);
